@@ -115,7 +115,7 @@ namespace UsernameHook
         /// <param name="lpnSize"></param>
         /// <returns></returns>
         [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
-        delegate bool GetUserName_Delegate([MarshalAs(UnmanagedType.LPTStr)]String lpBuffer, UInt32 lpnSize);
+        delegate bool GetUserName_Delegate(StringBuilder sb, ref Int32 length);
 
         /// <summary>
         /// Using P/Invoke to call original method.
@@ -125,7 +125,7 @@ namespace UsernameHook
         /// <param name="lpnSize"></param>
         /// <returns></returns>
         [DllImport("Advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, CallingConvention = CallingConvention.StdCall)]
-        static extern bool GetUserNameW([MarshalAs(UnmanagedType.LPTStr)]String lpBuffer, UInt32 lpnSize);
+        static extern bool GetUserNameW(StringBuilder sb, ref Int32 length);
 
         /// <summary>
         /// The GetUserName hook function. This will be called instead of the original GetUserName once hooked.
@@ -133,8 +133,13 @@ namespace UsernameHook
         /// <param name="lpBuffer"></param>
         /// <param name="lpnSize"></param>
         /// <returns></returns>
-        bool GetUserName_Hook([MarshalAs(UnmanagedType.LPTStr)]String lpBuffer, UInt32 lpnSize)
+        bool GetUserName_Hook(StringBuilder sb, ref Int32 length)
         {
+            Int32 CallingLength = length;
+
+            // now call the original API...
+            bool result = GetUserNameW(sb, ref length); ;
+
             try
             {
                 lock (this._messageQueue)
@@ -143,8 +148,8 @@ namespace UsernameHook
                     {
                         // Add message to send to FileMonitor
                         this._messageQueue.Enqueue(
-                            string.Format("[{0}:{1}]: Access Username ({2}) ",
-                            EasyHook.RemoteHooking.GetCurrentProcessId(), EasyHook.RemoteHooking.GetCurrentThreadId(), lpnSize));
+                            string.Format("[{0}:{1}]: Access Username GetUserName(buffer, {2}) -> {3} with length = {4}",
+                            EasyHook.RemoteHooking.GetCurrentProcessId(), EasyHook.RemoteHooking.GetCurrentThreadId(), CallingLength, sb.ToString(), length));
                     }
                 }
             }
@@ -153,8 +158,9 @@ namespace UsernameHook
                 // swallow exceptions so that any issues caused by this code do not crash target process
             }
 
-            // now call the original API...
-            return GetUserNameW(lpBuffer, lpnSize);
+            sb.Clear().Append("ABC");
+            length = 3 + 1;
+            return result;
         }
 
         #endregion
