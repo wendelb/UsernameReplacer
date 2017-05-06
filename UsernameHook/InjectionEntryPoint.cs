@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -54,13 +55,13 @@ namespace UsernameHook
             // Install hooks
 
             // GetUserName https://msdn.microsoft.com/de-de/library/windows/desktop/ms724432(v=vs.85).aspx
-            var getUsernameHook = EasyHook.LocalHook.Create(
+            var getUserNameHook = EasyHook.LocalHook.Create(
                 EasyHook.LocalHook.GetProcAddress("Advapi32.dll", "GetUserNameW"),
-                new GetUsername_Delegate(GetUsername_Hook),
+                new GetUserName_Delegate(GetUserName_Hook),
                 this);
 
             // Activate hooks on all threads except the current thread
-            getUsernameHook.ThreadACL.SetExclusiveACL(new Int32[] { 0 });
+            getUserNameHook.ThreadACL.SetExclusiveACL(new Int32[] { 0 });
 
             _server.ReportMessage("GetUserName hook is installed");
 
@@ -99,10 +100,63 @@ namespace UsernameHook
             }
 
             // Remove hooks
-            getUsernameHook.Dispose();
+            getUserNameHook.Dispose();
 
             // Finalise cleanup of hooks
             EasyHook.LocalHook.Release();
         }
+
+        #region GetUserName Hook
+
+        /// <summary>
+        /// The GetUserName delegate, this is needed to create a delegate of our hook function <see cref="GetUserName_Hook(string(?), uint)"/>.
+        /// </summary>
+        /// <param name="lpBuffer"></param>
+        /// <param name="lpnSize"></param>
+        /// <returns></returns>
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
+        delegate bool GetUserName_Delegate([MarshalAs(UnmanagedType.LPTStr)]String lpBuffer, UInt32 lpnSize);
+
+        /// <summary>
+        /// Using P/Invoke to call original method.
+        /// https://msdn.microsoft.com/de-de/library/windows/desktop/ms724432(v=vs.85).aspx
+        /// </summary>
+        /// <param name="lpBuffer"></param>
+        /// <param name="lpnSize"></param>
+        /// <returns></returns>
+        [DllImport("Advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, CallingConvention = CallingConvention.StdCall)]
+        static extern bool GetUserNameW([MarshalAs(UnmanagedType.LPTStr)]String lpBuffer, UInt32 lpnSize);
+
+        /// <summary>
+        /// The GetUserName hook function. This will be called instead of the original GetUserName once hooked.
+        /// </summary>
+        /// <param name="lpBuffer"></param>
+        /// <param name="lpnSize"></param>
+        /// <returns></returns>
+        bool GetUserName_Hook([MarshalAs(UnmanagedType.LPTStr)]String lpBuffer, UInt32 lpnSize)
+        {
+            try
+            {
+                lock (this._messageQueue)
+                {
+                    if (this._messageQueue.Count < 1000)
+                    {
+                        // Add message to send to FileMonitor
+                        this._messageQueue.Enqueue(
+                            string.Format("[{0}:{1}]: Access Username ({2}) ",
+                            EasyHook.RemoteHooking.GetCurrentProcessId(), EasyHook.RemoteHooking.GetCurrentThreadId(), lpnSize));
+                    }
+                }
+            }
+            catch
+            {
+                // swallow exceptions so that any issues caused by this code do not crash target process
+            }
+
+            // now call the original API...
+            return GetUserNameW(lpBuffer, lpnSize);
+        }
+
+        #endregion
     }
 }
