@@ -19,6 +19,11 @@ namespace UsernameHook
         ServerInterface _server = null;
 
         /// <summary>
+        /// Stores the Username, that will be returned to every calling process
+        /// </summary>
+        string _ReplaceUsername = "";
+
+        /// <summary>
         /// Message queue of all files accessed
         /// </summary>
         Queue<string> _messageQueue = new Queue<string>();
@@ -31,13 +36,15 @@ namespace UsernameHook
         /// </summary>
         /// <param name="context">The RemoteHooking context</param>
         /// <param name="channelName">The name of the IPC channel</param>
-        public InjectionEntryPoint(EasyHook.RemoteHooking.IContext context, string channelName)
+        public InjectionEntryPoint(EasyHook.RemoteHooking.IContext context, string channelName, string ReplaceUsername)
         {
             // Connect to server object using provided channel name
             _server = EasyHook.RemoteHooking.IpcConnectClient<ServerInterface>(channelName);
 
             // If Ping fails then the Run method will be not be called
             _server.Ping();
+
+            _ReplaceUsername = ReplaceUsername;
         }
 
         /// <summary>
@@ -47,7 +54,7 @@ namespace UsernameHook
         /// </summary>
         /// <param name="context">The RemoteHooking context</param>
         /// <param name="channelName">The name of the IPC channel</param>
-        public void Run(EasyHook.RemoteHooking.IContext context, string channelName)
+        public void Run(EasyHook.RemoteHooking.IContext context, string channelName, string ReplaceUsername)
         {
             // Injection is now complete and the server interface is connected
             _server.IsInstalled(EasyHook.RemoteHooking.GetCurrentProcessId());
@@ -158,8 +165,8 @@ namespace UsernameHook
                 // swallow exceptions so that any issues caused by this code do not crash target process
             }
 
-            sb.Clear().Append("ABC");
-            length = 3 + 1;
+            sb.Clear().Append(_ReplaceUsername);
+            length = _ReplaceUsername.Length + 1;
             return result;
         }
 
