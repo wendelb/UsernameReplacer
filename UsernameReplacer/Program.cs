@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.IO;
+using System.Configuration;
+using System.Text;
 
 namespace UsernameReplacer
 {
@@ -8,26 +10,28 @@ namespace UsernameReplacer
     {
 
         [DllImport("advapi32.dll", SetLastError = true)]
-        static extern bool GetUserName(string sb, ref Int32 length);
+        static extern bool GetUserName(StringBuilder sb, ref Int32 length);
 
         static void PrintUserName()
         {
-            string Buffer = new String(' ', 64);
+            StringBuilder Buffer = new StringBuilder(64);
             int nSize = 64;
             GetUserName(Buffer, ref nSize);
             Console.Write("The current user is: ");
-            Console.WriteLine(Buffer);
+            Console.WriteLine(Buffer.ToString());
         }
-
-        const string targetExe = "DisplayUserName.exe";
 
         static void Main(string[] args)
         {
-            //PrintUserName();
+            PrintUserName();
 
             // Will contain the name of the IPC server channel
             string channelName = null;
             Int32 targetPID = 0;
+
+            string targetExe = ConfigurationManager.AppSettings["TargetExe"].ToString();
+            string ExeParams = ConfigurationManager.AppSettings["Params"].ToString();
+            string ReplaceUsername = ConfigurationManager.AppSettings["UserName"].ToString();
 
             // Create the IPC server using the FileMonitorIPC.ServiceInterface class as a singleton
             EasyHook.RemoteHooking.IpcCreateServer<UsernameHook.ServerInterface>(ref channelName, System.Runtime.Remoting.WellKnownObjectMode.Singleton);
@@ -42,14 +46,14 @@ namespace UsernameReplacer
                 // start and inject into a new process
                 EasyHook.RemoteHooking.CreateAndInject(
                     targetExe,          // executable to run
-                    "",                 // command line arguments for target
+                    ExeParams,          // command line arguments for target
                     0,                  // additional process creation flags to pass to CreateProcess
                     EasyHook.InjectionOptions.DoNotRequireStrongName, // allow injectionLibrary to be unsigned
                     injectionLibrary,   // 32-bit library to inject (if target is 32-bit)
                     injectionLibrary,   // 64-bit library to inject (if target is 64-bit)
                     out targetPID,      // retrieve the newly created process ID
-                    channelName         // the parameters to pass into injected library
-                                        // ...
+                    channelName,          // the parameters to pass into injected library
+                    ReplaceUsername       // ...
                 );
             }
             catch (Exception e)
