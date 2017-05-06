@@ -6,9 +6,9 @@ This handy tool let's you run every app and it will detect a custom user name. M
 
 ## Screenshot
 
-![Screenshot](Screenshot.png)
+![Screenshot](screenshot.png)
 
-The shown app is [DisplayUsername](https://github.com:wendelb/DisplayUserName)
+The shown app is [DisplayUsername](https://github.com/wendelb/DisplayUserName)
 
 ## Configuration
 
