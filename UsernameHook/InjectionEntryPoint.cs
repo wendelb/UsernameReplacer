@@ -16,17 +16,17 @@ namespace UsernameHook
         /// <summary>
         /// Reference to the server interface within UsernameReplacer
         /// </summary>
-        ServerInterface _server = null;
+        private ServerInterface _server = null;
 
         /// <summary>
         /// Stores the Username, that will be returned to every calling process
         /// </summary>
-        string _ReplaceUsername = "";
+        private string _ReplaceUsername = "";
 
         /// <summary>
         /// Message queue of all files accessed
         /// </summary>
-        Queue<string> _messageQueue = new Queue<string>();
+        private Queue<string> _messageQueue = new Queue<string>();
 
         /// <summary>
         /// EasyHook requires a constructor that matches <paramref name="context"/> and any additional parameters as provided
