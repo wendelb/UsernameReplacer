@@ -32,6 +32,7 @@ namespace UsernameReplacer
             string targetExe = ConfigurationManager.AppSettings["TargetExe"].ToString();
             string ExeParams = ConfigurationManager.AppSettings["Params"].ToString();
             string ReplaceUsername = ConfigurationManager.AppSettings["UserName"].ToString();
+            string ReplaceDomain = ConfigurationManager.AppSettings["Domain"].ToString();
 
             // Create the IPC server using the FileMonitorIPC.ServiceInterface class as a singleton
             EasyHook.RemoteHooking.IpcCreateServer<UsernameHook.ServerInterface>(ref channelName, System.Runtime.Remoting.WellKnownObjectMode.Singleton);
@@ -52,8 +53,10 @@ namespace UsernameReplacer
                     injectionLibrary,   // 32-bit library to inject (if target is 32-bit)
                     injectionLibrary,   // 64-bit library to inject (if target is 64-bit)
                     out targetPID,      // retrieve the newly created process ID
-                    channelName,          // the parameters to pass into injected library
-                    ReplaceUsername       // ...
+                    // the parameters to pass into injected library
+                    channelName,        // Channel for Communication
+                    ReplaceUsername,    // Username
+                    ReplaceDomain       // Domain
                 );
             }
             catch (Exception e)

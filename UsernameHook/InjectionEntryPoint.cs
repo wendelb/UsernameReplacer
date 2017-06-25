@@ -21,7 +21,12 @@ namespace UsernameHook
         /// <summary>
         /// Stores the Username, that will be returned to every calling process
         /// </summary>
-        private string _ReplaceUsername = "";
+        private string _ReplaceUsername;
+
+        /// <summary>
+        /// Stores the Domain Name, that will be returned to every calling process
+        /// </summary>
+        private string _ReplaceDomainName;
 
         /// <summary>
         /// Message queue of all files accessed
@@ -36,7 +41,7 @@ namespace UsernameHook
         /// </summary>
         /// <param name="context">The RemoteHooking context</param>
         /// <param name="channelName">The name of the IPC channel</param>
-        public InjectionEntryPoint(EasyHook.RemoteHooking.IContext context, string channelName, string ReplaceUsername)
+        public InjectionEntryPoint(EasyHook.RemoteHooking.IContext context, string channelName, string ReplaceUsername, string ReplaceDomainName)
         {
             // Connect to server object using provided channel name
             _server = EasyHook.RemoteHooking.IpcConnectClient<ServerInterface>(channelName);
@@ -45,6 +50,7 @@ namespace UsernameHook
             _server.Ping();
 
             _ReplaceUsername = ReplaceUsername;
+            _ReplaceDomainName = ReplaceDomainName;
         }
 
         /// <summary>
@@ -54,7 +60,7 @@ namespace UsernameHook
         /// </summary>
         /// <param name="context">The RemoteHooking context</param>
         /// <param name="channelName">The name of the IPC channel</param>
-        public void Run(EasyHook.RemoteHooking.IContext context, string channelName, string ReplaceUsername)
+        public void Run(EasyHook.RemoteHooking.IContext context, string channelName, string ReplaceUsername, string ReplaceDomainName)
         {
             // Injection is now complete and the server interface is connected
             _server.IsInstalled(EasyHook.RemoteHooking.GetCurrentProcessId());
@@ -71,6 +77,17 @@ namespace UsernameHook
             getUserNameHook.ThreadACL.SetExclusiveACL(new Int32[] { 0 });
 
             _server.ReportMessage("GetUserName hook is installed");
+
+            // LookupAccountName https://msdn.microsoft.com/de-de/library/windows/desktop/aa379159(v=vs.85).aspx
+            var lookupAccountNameHook = EasyHook.LocalHook.Create(
+                EasyHook.LocalHook.GetProcAddress("Advapi32.dll", "LookupAccountNameW"),
+                new LookupAccountName_Delegate(lookupAccountName_Hook),
+                this);
+
+            // Activate hooks on all threads except the current thread
+            lookupAccountNameHook.ThreadACL.SetExclusiveACL(new Int32[] { 0 });
+
+            _server.ReportMessage("LookupAccountNameHook hook is installed");
 
             // Wake up the process (required if using RemoteHooking.CreateAndInject)
             EasyHook.RemoteHooking.WakeUpProcess();
@@ -108,6 +125,7 @@ namespace UsernameHook
 
             // Remove hooks
             getUserNameHook.Dispose();
+            lookupAccountNameHook.Dispose();
 
             // Finalise cleanup of hooks
             EasyHook.LocalHook.Release();
@@ -171,5 +189,87 @@ namespace UsernameHook
         }
 
         #endregion
+
+        #region LookupAccountName Hook
+
+        /// <summary>
+        /// See https://msdn.microsoft.com/de-de/library/windows/desktop/aa379601(v=vs.85).aspx
+        /// </summary>
+        enum SID_NAME_USE
+        {
+            SidTypeUser = 1,
+            SidTypeGroup,
+            SidTypeDomain,
+            SidTypeAlias,
+            SidTypeWellKnownGroup,
+            SidTypeDeletedAccount,
+            SidTypeInvalid,
+            SidTypeUnknown,
+            SidTypeComputer
+        }
+
+        /// <summary>
+        /// The LookupAccountName delegate, this is needed to create a delegate of our hook function <see cref="lookupAccountName_Hook(...)"/>.
+        /// </summary>
+        /// <returns></returns>
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
+        delegate bool LookupAccountName_Delegate(string lpSystemName, string lpAccountName, [MarshalAs(UnmanagedType.LPArray)] byte[] Sid, ref uint cbSid, StringBuilder ReferencedDomainName, ref uint cchReferencedDomainName, out SID_NAME_USE peUse);
+
+        /// <summary>
+        /// Using P/Invoke to call original method.
+        /// https://msdn.microsoft.com/de-de/library/windows/desktop/aa379159(v=vs.85).aspx
+        /// </summary>
+        /// <param name="lpBuffer"></param>
+        /// <param name="lpnSize"></param>
+        /// <returns></returns>
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool LookupAccountName(string lpSystemName, string lpAccountName, [MarshalAs(UnmanagedType.LPArray)] byte[] Sid, ref uint cbSid, StringBuilder ReferencedDomainName, ref uint cchReferencedDomainName, out SID_NAME_USE peUse);
+
+
+        /// <summary>
+        /// The LookupAccountName hook function. This will be called instead of the original LookupAccountName once hooked.
+        /// </summary>
+        /// <returns></returns>
+        bool lookupAccountName_Hook(string lpSystemName, string lpAccountName, [MarshalAs(UnmanagedType.LPArray)] byte[] Sid, ref uint cbSid, StringBuilder ReferencedDomainName, ref uint cchReferencedDomainName, out SID_NAME_USE peUse)
+        {
+            bool result;
+            // Filter for the correct calling type
+            if (lpSystemName == null)
+            {
+                // Hook if SystemName is null
+                peUse = SID_NAME_USE.SidTypeUser;
+                ReferencedDomainName.Clear().Append(_ReplaceDomainName);
+                result = true;
+
+            }
+            else
+            {
+                // now call the original API...
+                result = LookupAccountName(lpSystemName, lpAccountName, Sid, ref cbSid, ReferencedDomainName, ref cchReferencedDomainName, out peUse);
+            }
+
+            try
+            {
+                lock (this._messageQueue)
+                {
+                    if (this._messageQueue.Count < 1000)
+                    {
+                        // Add message to send to FileMonitor
+                        this._messageQueue.Enqueue(
+                            string.Format("[{0}:{1}]: Access LookupAccountName for account {2} -> {3}",
+                            EasyHook.RemoteHooking.GetCurrentProcessId(), EasyHook.RemoteHooking.GetCurrentThreadId(), lpAccountName, ReferencedDomainName.ToString()));
+                    }
+                }
+            }
+            catch
+            {
+                // swallow exceptions so that any issues caused by this code do not crash target process
+            }
+
+
+
+            return result;
+        }
     }
+    #endregion
 }

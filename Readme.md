@@ -17,6 +17,7 @@ The Replacer reads all parameters from the `App.config`. The folloging items are
 * `TargetExe`: The Application that should be started
 * `Params`: All params that should be submitted via command line
 * `UserName`: The Username that should be reported to the calling app
+* `Domain`: The Domain that should be reported to the calling app
 
 ## License
 

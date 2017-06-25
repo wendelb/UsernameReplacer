@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 // Attribute gesteuert. Ändern Sie diese Attributwerte, um die Informationen zu ändern,
 // die einer Assembly zugeordnet sind.
 [assembly: AssemblyTitle("UsernameHook")]
-[assembly: AssemblyDescription("Transparently change the username an application sees")]
+[assembly: AssemblyDescription("Transparently change the username and domain name an application sees")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("UsernameHook")]
